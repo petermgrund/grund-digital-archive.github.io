@@ -52,6 +52,15 @@
     </div>
   </section>
 
+  <section id="missing" hidden>
+    <p class="label">GDA ID</p>
+    <p class="code" id="missing-code"></p>
+    <p>There is no object with this code in the Grund Digital Archive.</p>
+    <p>The code is well formed, so it may be a misreading of a handwritten code
+      (for example 5 and S, 2 and Z, 8 and B, or 6 and G), or it was never issued.
+      If you think it should exist, <a class="ask" href="#">contact the maintainer</a>.</p>
+  </section>
+
   <section id="other" hidden>
     <h1 id="other-title"></h1>
     <p id="other-text"></p>
@@ -67,6 +76,10 @@
   // The family's own archive, for family members who can sign in. Set to "" to
   // remove the "Family access" box (for example once petermgrund.com is gone).
   const FAMILY_ARCHIVE = "https://gda.petermgrund.com/media/";
+  // The list of issued codes, one per line. A well-formed code that is not in it
+  // gets the "no object with this code" page. Set to "" to show every well-formed
+  // code without checking; an empty or unreachable list has the same effect.
+  const CODE_LIST = "/codes.txt";
   const FORWARD_KEY = "gda-open-in-family-archive";
 
   // BEGIN classify (tested by tests/classify.test.mjs; keep in step with GDA Identifiers v3)
@@ -104,6 +117,30 @@
   }
   // END classify
 
+  // BEGIN codelist (tested by tests/codelist.test.mjs)
+  // One code per line; "#" starts a comment; spaces, hyphens and letter case are ignored.
+  function parseCodeList(content) {
+    const codes = new Set();
+    for (const line of String(content || "").split("\n")) {
+      const code = line.replace(/#.*/, "").replace(/[\s\u2010-\u2015-]/g, "").toUpperCase();
+      if (code) codes.add(code);
+    }
+    return codes;
+  }
+  // END codelist
+
+  // true: the code is in the list. false: the list was read and the code is not in it.
+  // null: nothing to check against (CODE_LIST unset, or the list is empty or unreachable).
+  async function isIssued(code) {
+    if (!CODE_LIST) return null;
+    try {
+      const response = await fetch(CODE_LIST);
+      if (!response.ok) return null;
+      const codes = parseCodeList(await response.text());
+      return codes.size ? codes.has(code) : null;
+    } catch (e) { return null; }
+  }
+
   function show(id) { document.getElementById(id).hidden = false; }
   function text(id, value) { document.getElementById(id).textContent = value; }
 
@@ -116,29 +153,40 @@
   const result = classify(location.pathname);
   const stay = new URLSearchParams(location.search).has("stay");
 
+  function showMissing(code) {
+    history.replaceState(null, "", "/" + code + location.search);
+    document.title = "No object with code " + code + " \u00b7 Grund Digital Archive";
+    text("missing-code", code);
+    show("missing");
+  }
+
+  function showObject(code, result) {
+    history.replaceState(null, "", "/" + code + location.search);
+    document.title = "GDA " + code + " \u00b7 Grund Digital Archive";
+    text("object-code", code);
+    text("cite", "Grund Digital Archive, object " + code + ", https://w3id.org/gda/" + code);
+    if (result.file) {
+      text("file-note", "\u201c" + result.file + "\u201d is a file of this object" +
+           (result.part ? ": " + result.part + "." : "."));
+      show("file-note");
+    }
+    if (FAMILY_ARCHIVE) {
+      document.getElementById("family-link").href = FAMILY_ARCHIVE + code;
+      const box = document.getElementById("always");
+      box.checked = readForward();
+      box.addEventListener("change", () => writeForward(box.checked));
+      show("family");
+    }
+    show("object");
+  }
+
   if (result.kind === "object") {
     const code = result.value;
-    if (FAMILY_ARCHIVE && !stay && readForward()) {
-      location.replace(FAMILY_ARCHIVE + code);
-    } else {
-      history.replaceState(null, "", "/" + code + location.search);
-      document.title = "GDA " + code + " \u00b7 Grund Digital Archive";
-      text("object-code", code);
-      text("cite", "Grund Digital Archive, object " + code + ", https://w3id.org/gda/" + code);
-      if (result.file) {
-        text("file-note", "\u201c" + result.file + "\u201d is a file of this object" +
-             (result.part ? ": " + result.part + "." : "."));
-        show("file-note");
-      }
-      if (FAMILY_ARCHIVE) {
-        document.getElementById("family-link").href = FAMILY_ARCHIVE + code;
-        const box = document.getElementById("always");
-        box.checked = readForward();
-        box.addEventListener("change", () => writeForward(box.checked));
-        show("family");
-      }
-      show("object");
-    }
+    isIssued(code).then((issued) => {
+      if (issued === false) showMissing(code);
+      else if (FAMILY_ARCHIVE && !stay && readForward()) location.replace(FAMILY_ARCHIVE + code);
+      else showObject(code, result);
+    });
   } else {
     const messages = {
       scan: ["Scan number " + result.value,

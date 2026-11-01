@@ -22,10 +22,23 @@ Three things keep `codes.petermgrund.com` working:
    visitors to `https://codes.petermgrund.com/<code>`. It is changed with a
    pull request to the `perma-id/w3id.org` repository.
 
+## The list of codes
+
+`codes.txt` lists the codes of all objects in the archive, one per line. `#`
+starts a comment, and spaces, hyphens and letter case are ignored. A
+well-formed code that is not in the list gets a page saying there is no object
+with that code. While the list is empty, or if it cannot be loaded, every
+well-formed code is shown without that check, so the site keeps working until
+the list is filled in. The list is public, like the rest of this site, and
+GitHub Pages can serve the previous version for up to ten minutes after a
+change.
+
 ## Settings at the top of the script in `404.html`
 
 - `ASK_URL`: where "contact the keeper" leads to
 - `FAMILY_ARCHIVE`: the family's own archive, which needs a sign-in
+- `CODE_LIST`: the list of issued codes; set to `""` to show every
+  well-formed code without checking it
 
 ## Working on the site
 
@@ -34,3 +47,5 @@ Three things keep `codes.petermgrund.com` working:
   `https://codes.petermgrund.com/XFETYZ`.
 - `node tests/classify.test.mjs` checks how `404.html` reads a code from the
   address.
+- `node tests/codelist.test.mjs` checks how `404.html` reads the list of codes
+  and that every code in `codes.txt` is well formed.
