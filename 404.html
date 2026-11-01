@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Grund Digital Archive</title>
+<style>
+  :root { --bg: #fbfaf7; --fg: #1d1b18; --muted: #5f5a52; --line: #ddd7cc; --accent: #6b4f2a; --card: #ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #181715; --fg: #ece8e1; --muted: #a79f93; --line: #3a3631; --accent: #d9b27a; --card: #211f1c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+  h1 { font-size: 1.8rem; line-height: 1.2; margin: 0 0 1rem; font-weight: 650; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .4rem; }
+  a { color: var(--accent); }
+  code, .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .home { margin: 0 0 2.5rem; }
+  .home a { color: var(--muted); text-decoration: none; }
+  .label { color: var(--muted); margin: 0; }
+  .code { font-size: 2.6rem; letter-spacing: .12em; font-weight: 600; margin: 0 0 1rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.3rem; margin: 2rem 0; }
+  .card h2 { margin-top: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: .9rem; }
+  label { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="home"><a href="/">Grund Digital Archive</a></p>
+
+  <section id="object" hidden>
+    <p class="label">GDA ID</p>
+    <p class="code" id="object-code"></p>
+    <p id="file-note" hidden></p>
+    <p>This is the permanent code of an object in the Grund Digital Archive. The object 
+      may be a photograph, a document, an album or a saved file.</p>
+    <p>The archive's records are private so they are not shown here. To ask about
+      this object, <a class="ask" href="#">contact the maintainer</a>.</p>
+    <h2>How to cite it</h2>
+    <p><code id="cite"></code></p>
+    <div class="card" id="family" hidden>
+      <h2>Family access</h2>
+      <p><a id="family-link" href="#">Open this object in the family archive</a> (sign-in required).</p>
+      <p><label><input type="checkbox" id="always"> Always open codes in the family archive on this device</label></p>
+      <!-- <p class="muted small">After turning that on, add <code>?stay</code> to an address to see this page again.</p> -->
+    </div>
+  </section>
+
+  <section id="other" hidden>
+    <h1 id="other-title"></h1>
+    <p id="other-text"></p>
+    <p>A GDA code has 6 characters, capital letters and digits, such as <code>XFETYZ</code>.
+      Its permanent address is <code>https://w3id.org/gda/</code> followed by the code.</p>
+  </section>
+
+</main>
+
+<script>
+  // Where "contact the keeper" goes. A public GitHub question form.
+  const ASK_URL = "https://github.com/grund-digital-archive/grund-digital-archive.github.io/issues/new";
+  // The family's own archive, for family members who can sign in. Set to "" to
+  // remove the "Family access" box (for example once petermgrund.com is gone).
+  const FAMILY_ARCHIVE = "https://gda.petermgrund.com/media/";
+  const FORWARD_KEY = "gda-open-in-family-archive";
+
+  // BEGIN classify (tested by tests/classify.test.mjs; keep in step with GDA Identifiers v3)
+  const SUFFIXES = { o: "the untouched original", c: "a crop or other derived copy",
+    d: "a duplicate", v: "the back (verso)", a: "an AI-edited version", p: "a page of an album or scrapbook" };
+  const RETIRED = /^(C8T5|J82D|JYMZ|6H2P|G8NQ|GRU|CAS|MK|BIX|ALF|NHM|JGS|PMG|DRA|GCA|GCB|GSS|SHB|PGC|EXT|GFA)$/;
+
+  function classify(raw) {
+    let s = String(raw || "").trim();
+    try { s = decodeURIComponent(s); } catch (e) { /* keep as is */ }
+    s = s.trim().replace(/^\/+|\/+$/g, "")
+      .replace(/^(https?:\/\/)?w3id\.org\/gda\/?/i, "")
+      .replace(/^gda[\s:/]+/i, "").trim();
+    if (!s) return { kind: "empty" };
+    if (/^B[1-9]\d{0,2}(\.C[1-9]\d?)?(\.F[1-9]\d?)?$/i.test(s) || /^S[1-9]\d?$/i.test(s))
+      return { kind: "location", value: s.toUpperCase() };
+    const file = s;
+    const ext = s.match(/\.[a-z0-9]{2,5}$/i);
+    if (ext) s = s.slice(0, -ext[0].length);
+    if (/^a-?\d{6}$/i.test(s)) return { kind: "scan", value: s.toLowerCase().replace("-", "") };
+    const upper = s.toUpperCase();
+    if (RETIRED.test(upper) || /^[A-Z]{2,3}[/-][ABFV]\d{2}$/.test(upper) || /^[A-Z]{2,3}[/-]LO\d{0,2}$/.test(upper))
+      return { kind: "retired", value: upper };
+    let suffix = null;
+    const sm = s.match(/_(o|[cdvap]\d{2})$/i);
+    if (sm) { suffix = sm[1].toLowerCase(); s = s.slice(0, -sm[0].length); }
+    const key = s.replace(/[\s\u2010-\u2015-]/g, "").toUpperCase();
+    if (/^[A-HJKMNP-Z2-9]{6}$/.test(key)) {
+      const isFile = Boolean(suffix || ext);
+      return { kind: "object", value: key, file: isFile ? file : null,
+               part: suffix ? SUFFIXES[suffix[0]] : null };
+    }
+    if (/^[A-Z0-9]{6}$/.test(key)) return { kind: "misread", value: key };
+    return { kind: "unknown", value: file };
+  }
+  // END classify
+
+  function show(id) { document.getElementById(id).hidden = false; }
+  function text(id, value) { document.getElementById(id).textContent = value; }
+
+  function readForward() { try { return localStorage.getItem(FORWARD_KEY) === "1"; } catch (e) { return false; } }
+  function writeForward(on) {
+    try { if (on) localStorage.setItem(FORWARD_KEY, "1"); else localStorage.removeItem(FORWARD_KEY); } catch (e) { /* private mode */ }
+  }
+
+  document.querySelectorAll("a.ask").forEach(a => { a.href = ASK_URL; });
+  const result = classify(location.pathname);
+  const stay = new URLSearchParams(location.search).has("stay");
+
+  if (result.kind === "object") {
+    const code = result.value;
+    if (FAMILY_ARCHIVE && !stay && readForward()) {
+      location.replace(FAMILY_ARCHIVE + code);
+    } else {
+      history.replaceState(null, "", "/" + code + location.search);
+      document.title = "GDA " + code + " \u00b7 Grund Digital Archive";
+      text("object-code", code);
+      text("cite", "Grund Digital Archive, object " + code + ", https://w3id.org/gda/" + code);
+      if (result.file) {
+        text("file-note", "\u201c" + result.file + "\u201d is a file of this object" +
+             (result.part ? ": " + result.part + "." : "."));
+        show("file-note");
+      }
+      if (FAMILY_ARCHIVE) {
+        document.getElementById("family-link").href = FAMILY_ARCHIVE + code;
+        const box = document.getElementById("always");
+        box.checked = readForward();
+        box.addEventListener("change", () => writeForward(box.checked));
+        show("family");
+      }
+      show("object");
+    }
+  } else {
+    const messages = {
+      scan: ["Scan number " + result.value,
+        "This is a number from the archive's scanner log, not a permanent code. Scans are not cited on their own: cite the object the scan shows instead."],
+      location: ["Shelf location " + result.value,
+        "This only says where something is kept in the archive (box, compartment, folder). It changes when things are moved, so it is not a permanent code."],
+      retired: ["Retired code " + result.value,
+        "This code comes from an earlier naming scheme and was retired in 2026. It does not identify anything today."],
+      misread: ["Not a GDA code: " + result.value,
+        "GDA codes never contain the letters I, L or O or the digits 0 or 1, so this may be a misreading of a handwritten code."],
+      unknown: ["Not a GDA code", "The address does not contain a valid GDA code."],
+      empty: ["Not a GDA code", "The address does not contain a valid GDA code."],
+    };
+    const [title, body] = messages[result.kind];
+    document.title = title + " \u00b7 Grund Digital Archive";
+    text("other-title", title);
+    text("other-text", body);
+    show("other");
+  }
+</script>
+</body>
+</html>
