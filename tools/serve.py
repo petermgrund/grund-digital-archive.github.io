@@ -7,7 +7,7 @@ browser whenever a file changes.
 
 Like GitHub Pages: a folder serves its index.html, "/policy" redirects to
 "/policy/", and any address with no file behind it gets 404.html with status 404,
-so http://localhost:8000/XFETYZ behaves as https://grund-digital-archive.github.io/XFETYZ
+so http://localhost:8000/XFETYZ behaves as https://codes.petermgrund.com/XFETYZ
 will. Unlike GitHub Pages: each HTML page gets a small script that reloads it when
 you save a file. Standard library only; press Ctrl-C to stop.
 """
